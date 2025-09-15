@@ -1,50 +1,59 @@
-import ee
 import streamlit as st
-import json
+import ee
+import geemap.foliumap as geemap
 
 # ============================
-# Inicializar credenciales GEE
+# Configuración de la página
 # ============================
-service_account = st.secrets["service_account"]
-
-# Autenticación con Google Earth Engine
-credentials = ee.ServiceAccountCredentials(
-    email=service_account["client_email"],
-    key_data=service_account["private_key"]
-)
-ee.Initialize(credentials, project=service_account["project_id"])
-
-
-# ============================
-# Interfaz Streamlit
-# ============================
-st.set_page_config(page_title="Análisis NDBI - Colombia", layout="wide")
+st.set_page_config(page_title="📊 Datos NDBI - Norte de Colombia", layout="wide")
 st.title("📊 Datos NDBI - Norte de Colombia")
 
-# Área de estudio
-norte_colombia = ee.Geometry.Rectangle([-75.5, 11.5, -74.5, 12.5])
+# ============================
+# Autenticación con Google Earth Engine
+# ============================
+service_account = st.secrets["service_account"]["client_email"]
+credentials = ee.ServiceAccountCredentials(service_account, st.secrets["service_account"]["private_key"])
+ee.Initialize(credentials, project=st.secrets["service_account"]["project_id"])
 
-# Imagen fija (ejemplo Landsat 8 TOA)
-image = ee.Image('LANDSAT/LC08/C02/T1_TOA/LC08_008059_20230102')
+# ============================
+# Definir región de interés
+# ============================
+norte_colombia = ee.Geometry.Rectangle([-75, 11, -72, 13])
 
+# ============================
+# Cargar colección Landsat 8
+# ============================
+collection = (
+    ee.ImageCollection("LANDSAT/LC08/C01/T1_SR")
+    .filterBounds(norte_colombia)
+    .filterDate("2020-01-01", "2020-12-31")
+    .median()
+)
+
+# ============================
 # Calcular NDBI
-ndbi = image.normalizedDifference(['B6', 'B5']).rename('NDBI')
+# ============================
+ndbi = collection.normalizedDifference(["B6", "B5"]).rename("NDBI")
 
-# Reducir región (estadísticas)
-stats = ndbi.reduceRegion(
+# ============================
+# Reducir región para obtener promedio
+# ============================
+mean_ndbi = ndbi.reduceRegion(
     reducer=ee.Reducer.mean(),
     geometry=norte_colombia,
     scale=1000
-).getInfo()
+).get("NDBI")
 
-# Mostrar resultados
-st.subheader("📈 Estadísticas NDBI")
-st.metric("NDBI Promedio", f"{stats['NDBI']:.4f}")
+mean_ndbi_value = mean_ndbi.getInfo()
 
-# Interpretación
-st.subheader("📝 Interpretación de valores:")
-st.write("🔵 **-1.0 a -0.2:** Vegetación densa / Agua")
-st.write("⚪ **-0.2 a 0.2:** Suelo sin construcción")
-st.write("🔴 **0.2 a 1.0:** Áreas construidas / Urbanas")
+# ============================
+# Mostrar métrica
+# ============================
+st.metric("NDBI Promedio (2020)", f"{mean_ndbi_value:.4f}")
 
-st.success("¡Análisis completado en segundos con Google Earth Engine ⚡!")
+# ============================
+# Visualizar en mapa
+# ============================
+Map = geemap.Map(center=[12, -74], zoom=7)
+Map.addLayer(ndbi, {"min": -1, "max": 1, "palette": ["blue", "white", "green"]}, "NDBI")
+Map.to_streamlit(height=600)
