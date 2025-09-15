@@ -9,10 +9,10 @@ service_account = st.secrets["service_account"]
 
 # Autenticación con Google Earth Engine
 credentials = ee.ServiceAccountCredentials(
-    email=service_account["santiago-630@geomatica-470001.iam.gserviceaccount.com"],
+    email=service_account["client_email"],
     key_data=service_account["private_key"]
 )
-ee.Initialize(credentials, project=service_account["geomatica-470001"])
+ee.Initialize(credentials, project=service_account["project_id"])
 
 
 # ============================
