@@ -1,4 +1,5 @@
-streamlit
-earthengine-api
-google-auth
-ee
+earthengine-api==0.1.386
+geemap==0.32.0
+streamlit==1.38.0
+pandas
+numpy
