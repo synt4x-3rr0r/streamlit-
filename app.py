@@ -1,5 +1,4 @@
 import ee
-import json
 import streamlit as st
 import geemap.foliumap as geemap
 
@@ -10,7 +9,7 @@ service_account = st.secrets["service_account"]
 
 credentials = ee.ServiceAccountCredentials(
     service_account["client_email"],
-    key_data=json.dumps(service_account)
+    key_data=service_account["private_key"]
 )
 ee.Initialize(credentials)
 
