@@ -1,34 +1,64 @@
 import ee
+import json
 import streamlit as st
+import geemap.foliumap as geemap
 
-# Configuración
-st.title("📊 Datos NDBI - Norte de Colombia")
+# ------------------------------
+# 1. Autenticación con Secrets
+# ------------------------------
+service_account = st.secrets["service_account"]
 
-# Inicializar GEE
-ee.Initialize()
+credentials = ee.ServiceAccountCredentials(
+    service_account["client_email"],
+    key_data=json.dumps(service_account)
+)
+ee.Initialize(credentials)
 
-# Área de estudio
-norte_colombia = ee.Geometry.Rectangle([-75.5, 11.5, -74.5, 12.5])
+# ------------------------------
+# 2. Configuración de la app
+# ------------------------------
+st.set_page_config(page_title="NDBI con GEE", layout="wide")
+st.title("📊 Análisis de NDBI con Google Earth Engine")
 
-# Imagen fija (carga instantánea)
-image = ee.Image('LANDSAT/LC08/C02/T1_TOA/LC08_008059_20230102')
-ndbi = image.normalizedDifference(['B6', 'B5']).rename('NDBI')
+# ------------------------------
+# 3. Parámetros iniciales
+# ------------------------------
+roi = ee.Geometry.Polygon(
+    [[[-75.6, 6.2], [-75.6, 6.4], [-75.4, 6.4], [-75.4, 6.2]]]
+)  # Medellín de ejemplo
 
-# Calcular estadísticas rápidas
+collection = ee.ImageCollection("COPERNICUS/S2_SR") \
+    .filterBounds(roi) \
+    .filterDate("2024-01-01", "2024-12-31") \
+    .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 10))
+
+image = collection.median()
+
+# ------------------------------
+# 4. Cálculo del NDBI
+# ------------------------------
+ndbi = image.normalizedDifference(["B11", "B8"]).rename("NDBI")
+
+# Estadísticas
 stats = ndbi.reduceRegion(
-    reducer=ee.Reducer.mean(),
-    geometry=norte_colombia,
-    scale=1000
-).getInfo()
+    reducer=ee.Reducer.mean().combine(
+        reducer2=ee.Reducer.minMax(), sharedInputs=True
+    ),
+    geometry=roi,
+    scale=30,
+    maxPixels=1e9
+)
 
-# Mostrar resultados
-st.subheader("Estadísticas NDBI")
-st.metric("NDBI Promedio", f"{stats['NDBI']:.4f}")
+# ------------------------------
+# 5. Mostrar resultados
+# ------------------------------
+st.subheader("📈 Estadísticas del NDBI")
+st.json(stats.getInfo())
 
-# Interpretación
-st.subheader("Interpretación:")
-st.write("🔵 **-1.0 a -0.2:** Vegetación densa/Agua")
-st.write("⚪ **-0.2 a 0.2:** Suelo/Sin construcción")
-st.write("🔴 **0.2 a 1.0:** Áreas construidas/Urbanas")
-
-st.success("¡Análisis completado en menos de 2 segundos! ⚡")
+# ------------------------------
+# 6. Mapa interactivo
+# ------------------------------
+m = geemap.Map(center=[6.3, -75.5], zoom=11)
+m.addLayer(ndbi, {"min": -1, "max": 1, "palette": ["blue", "white", "green"]}, "NDBI")
+m.addLayer(roi, {}, "Región de interés")
+m.to_streamlit(width=1000, height=600)
